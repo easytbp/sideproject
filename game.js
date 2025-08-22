@@ -243,7 +243,7 @@ document.addEventListener("keydown", (e) => {
     }
 });
 
-// Draw hearts for health (text version ❤️)
+// Draw heart bar
 function drawHealth() {
     const barWidth = 80;   // same as player size
     const barHeight = 10;
@@ -297,3 +297,4 @@ function gameLoop(time) {
 }
 
 loadPlayerImages();
+
