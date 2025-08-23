@@ -5,15 +5,15 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// Define top and bottom black bars
-const topBlackAreaHeight = 400;
-const bottomBlackAreaHeight = 150;
+// Define the top and bottom black area boundaries
+const topBlackAreaHeight = 400;  // The height of the top black area
+const bottomBlackAreaHeight = 150;  // The height of the bottom black area
 
-// Playable area size
-const visibleWidth = canvas.width;
-const visibleHeight = canvas.height - topBlackAreaHeight - bottomBlackAreaHeight;
+// Define the visible (playable) area boundaries
+const visibleWidth = canvas.width; // Playable width
+const visibleHeight = canvas.height - topBlackAreaHeight - bottomBlackAreaHeight; // Playable height, accounting for both black areas
 
-// Player
+// Player settings
 const player = {
     x: canvas.width / 2,
     y: canvas.height / 2,
@@ -21,89 +21,137 @@ const player = {
     speed: 5,
     dx: 0,
     dy: 0,
-    currentFrame: 0,
-    frameSpeed: 120, // ms per frame for sprite cycle
-    lastFrameTime: 0,
-    movementDirection: "down",
-    isMoving: false,
-    health : 3 // player starts with 3 health
+    currentFrame: 0,  // To track the current animation frame
+    frameSpeed: 18,  // Speed of frame change (in ms)
+    movementDirection: "down",  // Default direction (down)
+    isMoving: false, 
 };
 
+// Score settings
 let score = 0;
 let gameOver = false;
 
-// Food
+// Food settings (the collectible items)
 const food = {
-    x: Math.random() * visibleWidth,
-    y: Math.random() * visibleHeight + topBlackAreaHeight,
+    x: Math.random() * visibleWidth, // Spawn within the visible width (playable width)
+    y: Math.random() * visibleHeight + topBlackAreaHeight, // Spawn within the visible height (playable height) and respect the top black area
     size: 20,
+    lasers: []
 };
 
-// Lasers
+// Laser settings
 const laserSpeed = 5;
 const laserSize = 10;
+
+// Player's lasers array
 const playerLasers = [];
 const enemyLasers = [];
 
-// Sprites
-const playerImages = { up: [], down: [], left: [], right: [] };
-const backgroundImage = new Image();
-backgroundImage.src = "img/bg.jpg";
+// Load images for different movements (u1-u4, d1-d4, l1-l4, r1r4)
+const playerImages = {
+    up: [],
+    down: [],
+    left: [],
+    right: []
+};
 
-// Load player images
+// Background image
+const backgroundImage = new Image();
+backgroundImage.src = "img/bg.jpg"; // Specify your background image path
+
+// Load images for player movement
 async function loadPlayerImages() {
-    const loadImage = (src) => new Promise((res, rej) => {
-        const img = new Image();
-        img.src = src;
-        img.onload = () => res(img);
-        img.onerror = () => rej(src);
-    });
-    for (let i = 1; i <= 4; i++) {
-        playerImages.up.push(await loadImage(`img/u${i}.png`));
-        playerImages.down.push(await loadImage(`img/d${i}.png`));
-        playerImages.left.push(await loadImage(`img/l${i}.png`));
-        playerImages.right.push(await loadImage(`img/r${i}.png`));
+    try {
+        for (let i = 1; i <= 4; i++) {
+            playerImages.up.push(await loadImage(`img/u${i}.png`));
+            playerImages.down.push(await loadImage(`img/d${i}.png`));
+            playerImages.left.push(await loadImage(`img/l${i}.png`));
+            playerImages.right.push(await loadImage(`img/r${i}.png`));
+        }
+        startAnimation(); // Start the animation once the images are loaded
+    } catch (error) {
+        console.error("Error loading images:", error);
     }
-    requestAnimationFrame(gameLoop);
 }
 
-// Movement keys
-let keys = {};
+// Load individual images
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.src = src;
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(`Failed to load image: ${src}`);
+    });
+}
+
+// Key press listeners for player movement and laser shooting
+let keys = {};  // Object to track the state of each key
+
 document.addEventListener("keydown", (e) => {
-    keys[e.key] = true;
-    if (e.key === "i" || e.key === "I") createLaser();
-    if (e.key === "ArrowUp") { player.dy = -player.speed; player.movementDirection = "up"; }
-    if (e.key === "ArrowDown") { player.dy = player.speed; player.movementDirection = "down"; }
-    if (e.key === "ArrowLeft") { player.dx = -player.speed; player.movementDirection = "left"; }
-    if (e.key === "ArrowRight") { player.dx = player.speed; player.movementDirection = "right"; }
-    player.isMoving = true;
-});
-document.addEventListener("keyup", (e) => {
-    keys[e.key] = false;
-    if (!keys["ArrowUp"] && !keys["ArrowDown"]) player.dy = 0;
-    if (!keys["ArrowLeft"] && !keys["ArrowRight"]) player.dx = 0;
-    player.isMoving = keys["ArrowUp"] || keys["ArrowDown"] || keys["ArrowLeft"] || keys["ArrowRight"];
+    keys[e.key] = true; // Mark key as pressed
+
+    // Check for laser shooting (I key)
+    if (e.key === "i" || e.key === "I") {
+        createLaser(); // Create laser when "I" key is pressed
+    }
+
+    // Update player movement based on the last pressed key
+    if (e.key === "ArrowUp" && !keys["ArrowDown"]) { // Only up if not down
+        player.dy = -player.speed;
+        player.movementDirection = "up"; // Set to 'up' when ArrowUp is pressed
+    } else if (e.key === "ArrowDown" && !keys["ArrowUp"]) { // Only down if not up
+        player.dy = player.speed;
+        player.movementDirection = "down"; // Set to 'down' when ArrowDown is pressed
+    } else if (e.key === "ArrowLeft") {
+        player.dx = -player.speed;
+        player.movementDirection = "left"; // Set to 'left' when ArrowLeft is pressed
+    } else if (e.key === "ArrowRight") {
+        player.dx = player.speed;
+        player.movementDirection = "right"; // Set to 'right' when ArrowRight is pressed
+    }
+
+    player.isMoving = true; // Player is moving as a key is pressed
 });
 
-// Update player
+document.addEventListener("keyup", (e) => {
+    keys[e.key] = false; // Mark key as not pressed
+
+    // Stop player movement when the key is released
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") player.dy = 0;
+    if (e.key === "ArrowLeft" || e.key === "ArrowRight") player.dx = 0;
+
+    // When the player releases a key, check for the direction they are still holding
+    if (!keys["ArrowUp"] && !keys["ArrowDown"] && !keys["ArrowLeft"] && !keys["ArrowRight"]) {
+        player.isMoving = false; // Stop animation when no keys are pressed
+    } else {
+        player.isMoving = true; // Keep moving based on the last key pressed
+    }
+
+    // Ensure the player keeps facing the direction of the last held key
+    if (keys["ArrowUp"]) player.movementDirection = "up";
+    if (keys["ArrowDown"]) player.movementDirection = "down";
+    if (keys["ArrowLeft"]) player.movementDirection = "left";
+    if (keys["ArrowRight"]) player.movementDirection = "right";
+});
+
+// Update player position
 function updatePlayer() {
     player.x += player.dx;
     player.y += player.dy;
-    player.x = Math.max(0, Math.min(player.x, visibleWidth - player.size));
-    player.y = Math.max(topBlackAreaHeight, Math.min(player.y, topBlackAreaHeight + visibleHeight - player.size));
+
+    // Ensure the player stays within the visible (playable) area
+    player.x = Math.max(0, Math.min(player.x, visibleWidth - player.size)); // Prevent moving off canvas horizontally
+    player.y = Math.max(topBlackAreaHeight, Math.min(player.y, topBlackAreaHeight + visibleHeight - player.size)); // Prevent moving off canvas vertically, respecting the top black area
 }
 
-// Draw player
-function drawPlayer(time) {
-    if (player.isMoving && time - player.lastFrameTime > player.frameSpeed) {
-        player.currentFrame = (player.currentFrame + 1) % 4;
-        player.lastFrameTime = time;
-    }
-    const img = playerImages[player.movementDirection][player.currentFrame];
-    ctx.drawImage(img, player.x, player.y, player.size, player.size);
+// Draw player based on current direction and frame
+function drawPlayer() {
+    const directionImages = playerImages[player.movementDirection];
+    const currentImage = directionImages[player.currentFrame]; // Select the current frame in the animation
+    ctx.drawImage(currentImage, player.x, player.y, player.size, player.size);
 }
 
-// Food
+// Draw food
 function drawFood() {
     ctx.fillStyle = "#e74c3c";
     ctx.beginPath();
@@ -111,155 +159,227 @@ function drawFood() {
     ctx.fill();
 }
 
-function checkFoodCollision() {
-    const dx = player.x + player.size / 2 - food.x;
-    const dy = player.y + player.size / 2 - food.y;
-    if (Math.sqrt(dx * dx + dy * dy) < player.size / 2 + food.size / 2) {
-        score++;
-        food.x = Math.random() * (visibleWidth - food.size);
-        food.y = Math.random() * (visibleHeight - food.size) + topBlackAreaHeight;
-    }
-}
-
-// Lasers
-function createLaser() {
-    const laser = { x: player.x + player.size / 2, y: player.y + player.size / 2, dx: 0, dy: 0, size: laserSize };
-    if (player.movementDirection === "up") laser.dy = -laserSpeed;
-    if (player.movementDirection === "down") laser.dy = laserSpeed;
-    if (player.movementDirection === "left") laser.dx = -laserSpeed;
-    if (player.movementDirection === "right") laser.dx = laserSpeed;
-    playerLasers.push(laser);
-}
-function createEnemyLaser() {
-    const laser = { x: food.x, y: food.y, dx: (player.x - food.x) / 50, dy: (player.y - food.y) / 50, size: laserSize };
-    enemyLasers.push(laser);
-}
-function updateLasers() {
-    [playerLasers, enemyLasers].forEach(list => {
-        for (let i = list.length - 1; i >= 0; i--) {
-            list[i].x += list[i].dx;
-            list[i].y += list[i].dy;
-            if (list[i].x < 0 || list[i].x > canvas.width || list[i].y < 0 || list[i].y > canvas.height) {
-                list.splice(i, 1);
-            }
-        }
-    });
-}
-function drawLasers() {
-    playerLasers.forEach(l => { ctx.fillStyle = "blue"; ctx.beginPath(); ctx.arc(l.x, l.y, l.size, 0, Math.PI * 2); ctx.fill(); });
-    enemyLasers.forEach(l => { ctx.fillStyle = "red"; ctx.beginPath(); ctx.arc(l.x, l.y, l.size, 0, Math.PI * 2); ctx.fill(); });
-}
-
-// Laser collisions
-function checkLaserCollisions() {
-    // Player lasers vs food
-    for (let i = playerLasers.length - 1; i >= 0; i--) {
-        const l = playerLasers[i];
-        const dx = l.x - food.x, dy = l.y - food.y;
-        if (Math.sqrt(dx * dx + dy * dy) < food.size / 2 + l.size / 2) {
-            score++;
-            food.x = Math.random() * (visibleWidth - food.size);
-            food.y = Math.random() * (visibleHeight - food.size) + topBlackAreaHeight;
-            playerLasers.splice(i, 1);
-        }
-    }
-    // Enemy lasers vs player
-    for (let i = enemyLasers.length - 1; i >= 0; i--) {
-        const l = enemyLasers[i];
-        const dx = l.x - (player.x + player.size / 2), dy = l.y - (player.y + player.size / 2);
-        if (Math.sqrt(dx * dx + dy * dy) < player.size / 2 + l.size / 2) {
-            player.health--;
-            enemyLasers.splice(i, 1);
-            if (player.health <= 0){
-               gameOver = true; 
-            }
-            
-        }
-    }
-}
-
-// Draw background
-function drawBackground() {
-    const imgRatio = backgroundImage.width / backgroundImage.height;
-    const canvasRatio = canvas.width / canvas.height;
-    let drawW, drawH, offX = 0, offY = 0;
-    if (canvasRatio > imgRatio) {
-        drawH = canvas.height;
-        drawW = backgroundImage.width * (drawH / backgroundImage.height);
-        offX = (canvas.width - drawW) / 2;
-    } else {
-        drawW = canvas.width;
-        drawH = backgroundImage.height * (drawW / backgroundImage.width);
-        offY = (canvas.height - drawH) / 2;
-    }
-    ctx.drawImage(backgroundImage, offX, offY, drawW, drawH);
-}
-
-// Score & Game Over text
+// Draw score
 function drawScore() {
     ctx.font = "30px Arial";
-    ctx.fillStyle = "white";
+    ctx.fillStyle = "#fff"; // Set the score text color to white
     ctx.fillText("Score: " + score, 10, 30);
 }
-function drawGameOver() {
-    ctx.font = "60px Arial";
-    ctx.fillStyle = "red";
-    ctx.fillText("GAME OVER", canvas.width / 2 - 180, canvas.height / 2);
-    ctx.font = "30px Arial";
-    ctx.fillStyle = "white";
-    ctx.fillText("Press R to restart", canvas.width / 2 - 130, canvas.height / 2 + 50);
-}
 
-document.addEventListener("keydown", (e) => {
-    if (gameOver && (e.key === "r" || e.key === "R")) {
-        score = 0;
-        gameOver = false;
-        player.x = canvas.width / 2;
-        player.y = canvas.height / 2;
-        playerLasers.length = 0;
-        enemyLasers.length = 0;
-        player.health = 3; //reset health
-    }
-});
-
-// NEW: draw hearts for health
-function drawHealth() {
-    const heartSize = 45; // pixel size of hearts
-    const heartSpacing = 40; // distance between hearts
-    ctx.font = heartSize + "px Arial";
-    ctx.fillStyle = "red";
-
-    for (let i = 0; i < player.health; i++) {
-        ctx.fillText("❤️", 10 + i * heartSpacing, 70);
+// Check for collision with food
+function checkCollision() {
+    const distX = player.x + player.size / 2 - food.x;
+    const distY = player.y + player.size / 2 - food.y;
+    const distance = Math.sqrt(distX * distX + distY * distY);
+    if (distance < player.size / 2 + food.size / 2) {
+        score++;
+        food.x = Math.random() * (visibleWidth - food.size); // Spawn within visible area
+        food.y = Math.random() * (visibleHeight - food.size) + topBlackAreaHeight; // Respect the top black area
     }
 }
 
-// Main loop
-function gameLoop(time) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+// Create player laser
+function createLaser() {
+    const laser = {
+        x: player.x + player.size / 2,
+        y: player.y + player.size / 2,
+        dx: 0,
+        dy: 0,
+        size: laserSize
+    };
+
+    // Set laser direction based on player's current movement
+    if (player.movementDirection === "up") {
+        laser.dy = -laserSpeed;
+    } else if (player.movementDirection === "down") {
+        laser.dy = laserSpeed;
+    } else if (player.movementDirection === "left") {
+        laser.dx = -laserSpeed;
+    } else if (player.movementDirection === "right") {
+        laser.dx = laserSpeed;
+    }
+
+    playerLasers.push(laser); // Add laser to player's lasers array
+}
+
+// Create enemy laser (from food to player)
+function createEnemyLaser() {
+    const laser = {
+        x: food.x,
+        y: food.y,
+        dx: (player.x - food.x) / 50, // Moves towards player
+        dy: (player.y - food.y) / 50, // Moves towards player
+        size: laserSize
+    };
+
+    enemyLasers.push(laser); // Add enemy laser to array
+}
+
+// Update lasers and move them
+function updateLasers() {
+    for (let i = 0; i < playerLasers.length; i++) {
+        const laser = playerLasers[i];
+        laser.x += laser.dx;
+        laser.y += laser.dy;
+    }
+
+    for (let i = 0; i < enemyLasers.length; i++) {
+        const laser = enemyLasers[i];
+        laser.x += laser.dx;
+        laser.y += laser.dy;
+    }
+}
+
+// Check for laser collisions with the food and player
+function checkLaserCollisions() {
+    // --- Player lasers hitting food ---
+    for (let i = 0; i < playerLasers.length; i++) {
+        const laser = playerLasers[i];
+        const distX = laser.x - food.x;
+        const distY = laser.y - food.y;
+        const distance = Math.sqrt(distX * distX + distY * distY);
+
+        if (distance < food.size / 2 + laser.size / 2) {
+            score++; // Increase score
+            // Respawn food
+            food.x = Math.random() * (visibleWidth - food.size);
+            food.y = Math.random() * (visibleHeight - food.size) + topBlackAreaHeight;
+            playerLasers.splice(i, 1); // Remove laser after collision
+            i--; // Adjust index after removal
+        }
+    }
+
+    // --- Enemy lasers hitting player ---
+    for (let i = 0; i < enemyLasers.length; i++) {
+        const laser = enemyLasers[i];
+        const distX = laser.x - (player.x + player.size / 2);
+        const distY = laser.y - (player.y + player.size / 2);
+        const distance = Math.sqrt(distX * distX + distY * distY);
+
+        // Use realistic collision radius: half player size + half laser size
+        const collisionRadius = player.size / 2 + laser.size / 2;
+
+        if (distance < collisionRadius) {
+            gameOver = true;
+
+            // Visual effect: remove laser that hit the player
+            enemyLasers.splice(i, 1);
+            i--; // Adjust index
+
+            // Small delay before respawn to see the hit
+            setTimeout(() => {
+                score = 0;
+                alert("Game Over! Score has been reset.");
+                respawnPlayer();
+            }, 50); // 50ms pause is enough for visual recognition
+
+            break; // Only handle one collision at a time
+        }
+    }
+}
+
+// Draw lasers
+function drawLasers() {
+    // Draw player's lasers (blue)
+    for (let i = 0; i < playerLasers.length; i++) {
+        const laser = playerLasers[i];
+        ctx.fillStyle = "blue"; // Player's laser color
+        ctx.beginPath();
+        ctx.arc(laser.x, laser.y, laser.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Draw enemy's lasers (red)
+    for (let i = 0; i < enemyLasers.length; i++) {
+        const laser = enemyLasers[i];
+        ctx.fillStyle = "red"; // Enemy's laser color
+        ctx.beginPath();
+        ctx.arc(laser.x, laser.y, laser.size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+// Draw background and game elements
+function gameLoop() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas for next frame
+
+    // Draw the background
     ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    drawBackground();
+    ctx.fillRect(0, 0, canvas.width, canvas.height); // Fill entire canvas with black
 
-    if (!gameOver) {
-        updatePlayer();
-        checkFoodCollision();
-        checkLaserCollisions();
-        updateLasers();
+    drawBackground();  // Draw the background
 
-        drawPlayer(time);
-        drawFood();
-        drawLasers();
-        drawScore();
-        drawHealth();
+    updatePlayer();
+    checkCollision();
+    checkLaserCollisions(); // Check laser collisions with food
+    updateLasers(); // Update laser positions
 
+    drawPlayer();  // Draw player
+    drawFood();    // Draw food
+    drawScore();   // Draw score
+    drawLasers();  // Draw lasers
 
-        if (Math.random() < 0.01) createEnemyLaser();
-    } else {
-        drawGameOver();
+    // Create enemy lasers randomly
+    if (Math.random() < 0.01 && !gameOver) {
+        createEnemyLaser();
     }
-
-    requestAnimationFrame(gameLoop);
 }
 
+// Draw the background image and maintain aspect ratio
+function drawBackground() {
+    const imgWidth = backgroundImage.width;
+    const imgHeight = backgroundImage.height;
+    const canvasRatio = canvas.width / canvas.height;
+    const imgRatio = imgWidth / imgHeight;
+
+    let drawWidth, drawHeight, offsetX, offsetY;
+
+    if (canvasRatio > imgRatio) {
+        drawHeight = canvas.height;
+        drawWidth = imgWidth * (drawHeight / imgHeight);
+        offsetX = (canvas.width - drawWidth) / 2;
+        offsetY = 0;
+    } else {
+        drawWidth = canvas.width;
+        drawHeight = imgHeight * (drawWidth / imgWidth);
+        offsetX = 0;
+        offsetY = (canvas.height - drawHeight) / 2;
+    }
+
+    ctx.drawImage(backgroundImage, offsetX, offsetY, drawWidth, drawHeight);
+}
+
+// Respawn the player at a random position
+function respawnPlayer() {
+    const buffer = 100;
+    let randomX, randomY;
+
+    // Reset movement state
+    player.dx = 0;
+    player.dy = 0;
+    player.isMoving = false;
+    keys = {}; // Reset the keys object to ensure no key is pressed
+
+    do {
+        randomX = Math.random() * (visibleWidth - player.size);
+        randomY = Math.random() * (visibleHeight - player.size);
+    } while (Math.abs(randomX - food.x) < buffer && Math.abs(randomY - food.y) < buffer);
+
+    player.x = randomX;
+    player.y = randomY;
+
+    gameOver = false;  // Reset the gameOver flag to allow lasers again
+}
+
+// Start animation with setInterval to control frame rate
+function startAnimation() {
+    setInterval(() => {
+        if (player.isMoving) {
+            player.currentFrame = (player.currentFrame + 1) % 4;  // Cycle through 4 frames
+        }
+        gameLoop();
+    }, player.frameSpeed);  // 100ms frame update for fast animation
+}
+
+// Start the image loading and then the animation loop
 loadPlayerImages();
