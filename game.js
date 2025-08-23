@@ -26,7 +26,10 @@ const player = {
     lastFrameTime: 0,
     movementDirection: "down",
     isMoving: false,
-    health : 3 // player starts with 3 health
+    health: 3, // player starts with 3 health
+    isInvincible: false,
+    invincibilityDuration: 1000, // 1 second of invulnerability
+    lastHitTime: 0,
 };
 
 let score = 0;
@@ -100,7 +103,20 @@ function drawPlayer(time) {
         player.lastFrameTime = time;
     }
     const img = playerImages[player.movementDirection][player.currentFrame];
+
+    // Flash effect if invincible
+    if (player.isInvincible) {
+        if (Math.floor(time / 100) % 2 === 0) {
+            ctx.globalAlpha = 0.5;
+        } else {
+            ctx.globalAlpha = 1;
+        }
+    } else {
+        ctx.globalAlpha = 1;
+    }
+
     ctx.drawImage(img, player.x, player.y, player.size, player.size);
+    ctx.globalAlpha = 1; // reset
 }
 
 // Food
@@ -168,12 +184,16 @@ function checkLaserCollisions() {
         const l = enemyLasers[i];
         const dx = l.x - (player.x + player.size / 2), dy = l.y - (player.y + player.size / 2);
         if (Math.sqrt(dx * dx + dy * dy) < player.size / 2 + l.size / 2) {
-            player.health--;
-            enemyLasers.splice(i, 1);
-            if (player.health <= 0){
-               gameOver = true; 
+            if (!player.isInvincible) {
+                player.health--;
+                player.isInvincible = true;
+                player.lastHitTime = performance.now();
+
+                if (player.health <= 0) {
+                    gameOver = true;
+                }
             }
-            
+            enemyLasers.splice(i, 1);
         }
     }
 }
@@ -219,27 +239,42 @@ document.addEventListener("keydown", (e) => {
         playerLasers.length = 0;
         enemyLasers.length = 0;
         player.health = 3; //reset health
+        player.isInvincible = false;
     }
 });
 
-// NEW: draw hearts for health
+// Draw heart bar
 function drawHealth() {
-    const heartSize = 45; // pixel size of hearts
-    const heartSpacing = 40; // distance between hearts
-    ctx.font = heartSize + "px Arial";
-    ctx.fillStyle = "red";
+    const barWidth = 80;   // same as player size
+    const barHeight = 10;
+    const barX = player.x;
+    const barY = player.y - 15; // just above the player
 
-    for (let i = 0; i < player.health; i++) {
-        ctx.fillText("❤️", 10 + i * heartSpacing, 70);
-    }
+    // Draw background (empty bar)
+    ctx.fillStyle = "grey";
+    ctx.fillRect(barX, barY, barWidth, barHeight);
+
+    // Calculate percentage
+    const healthPercent = player.health / 3; // max health = 3
+    ctx.fillStyle = healthPercent > 0.5 ? "limegreen" : healthPercent > 0.25 ? "yellow" : "red";
+    ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+
+    // Border
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(barX, barY, barWidth, barHeight);
 }
-
 // Main loop
 function gameLoop(time) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = "black";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     drawBackground();
+
+    // Handle invincibility timeout
+    if (player.isInvincible && performance.now() - player.lastHitTime > player.invincibilityDuration) {
+        player.isInvincible = false;
+    }
 
     if (!gameOver) {
         updatePlayer();
@@ -253,7 +288,6 @@ function gameLoop(time) {
         drawScore();
         drawHealth();
 
-
         if (Math.random() < 0.01) createEnemyLaser();
     } else {
         drawGameOver();
@@ -263,3 +297,4 @@ function gameLoop(time) {
 }
 
 loadPlayerImages();
+
