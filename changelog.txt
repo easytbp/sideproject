@@ -1,0 +1,19 @@
+v0.1.98
+1. Use requestAnimationFrame instead of setInterval.
+
+2. Separate logic updates (player, lasers, collisions) from animation frame timing (sprite cycling).
+
+3. Add laser cleanup when they leave the screen.
+
+4. Replace the blocking alert("Game Over!") with a canvas overlay.
+
+5. Add in Health system.
+
+v0.1.99
+1. Keeps invincibility frames (show flashing effect when get damage).
+
+2. Add health bar: 
+    i) Always appears above the player sprite.
+   ii) Changes color: green (safe) → yellow (mid) → red (danger).
+
+3. Remove hearts symbol show at the top left.
