@@ -1,2 +1,0 @@
-Improve enemy visuals (currently red squares).
-Add different enemy types (fast/weak vs slow/strong).

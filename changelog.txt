@@ -18,7 +18,7 @@ v0.1.99
 
 3. Remove hearts symbol show at the top left.
 
-v0.2.0
+v0.2.0-beta
 1. Food removed → Enemies added
    i) Replaced the single food object with an array of enemies.
   ii) Enemies move around and spawn near the edges of the playable area.
