@@ -41,8 +41,3 @@ v0.2.0-beta
   ii) Player’s health bar still appears above the player.
  iii) Score counter remains in the top-left.
   iv) Game Over / Restart screen unchanged.
-  
-v0.2.1
-1. Enemy visual added.
-
-2. Enemy movement optimized.
