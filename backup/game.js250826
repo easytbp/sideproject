@@ -76,10 +76,6 @@ const backgroundImage = new Image();
 backgroundImage.src = "img/bg.jpg";
 let bgLoaded = false;
 backgroundImage.onload = () => { bgLoaded = true; };
-<<<<<<< HEAD
-=======
-const slimeImages = [];
->>>>>>> dev/easytbp
 
 // Load player images safely (placeholders if missing)
 function loadImg(src) {
@@ -98,15 +94,6 @@ function loadImg(src) {
     playerImages.right.push(await loadImg(`img/r${i}.png`));
   }
 })();
-<<<<<<< HEAD
-=======
-// Load all 12 frames of the slime animation
-(async function loadSlimeImages() {
-  for (let i = 1; i <= 12; i++) {
-    slimeImages.push(await loadImg(`img/slime/slm${i}.png`));
-  }
-})();
->>>>>>> dev/easytbp
 
 // --- Lasers ------------------------------------------------------------------
 const laserSpeed = 8;
@@ -174,18 +161,11 @@ const enemies = [];
 let lastSpawnTime = 0;
 
 function spawnEnemy() {
-<<<<<<< HEAD
   // Spawn around edges of the playable area
   const side = Math.floor(Math.random() * 4);
   let x, y;
   const margin = 40;
   if (side === 0) { // top edge of play area
-=======
-  const side = Math.floor(Math.random() * 4);
-  let x, y;
-  const margin = 40;
-  if (side === 0) { // top edge
->>>>>>> dev/easytbp
     x = randRange(0, visibleWidth - 60);
     y = topBlackAreaHeight + margin;
   } else if (side === 1) { // bottom edge
@@ -206,18 +186,9 @@ function spawnEnemy() {
     speed: baseSpeed,
     dx: randRange(-1, 1),
     dy: randRange(-1, 1),
-<<<<<<< HEAD
     health: 2 + Math.floor(score / 15), // scales a bit with score
     fireInterval: randRange(800, 1600) - Math.min(600, score * 5), // shoots faster with score
     lastFire: performance.now() + randRange(0, 500),
-=======
-    health: 2 + Math.floor(score / 15),
-    fireInterval: randRange(800, 1600) - Math.min(600, score * 5),
-    lastFire: performance.now() + randRange(0, 500),
-    currentFrame: 0, // Set initial frame
-    lastFrameTime: 0, // Last time the frame was updated
-    frameSpeed: 100, // ms per frame (adjust this to control animation speed)
->>>>>>> dev/easytbp
   };
 
   // Normalize movement vector
@@ -231,11 +202,7 @@ function spawnEnemy() {
 function updateEnemies() {
   const now = performance.now();
   // Desired enemy count scales with score
-<<<<<<< HEAD
   const desired = 3 + Math.floor(score / 10); // 3.. up
-=======
-  const desired = 3 + Math.floor(score / 10);
->>>>>>> dev/easytbp
   if (enemies.length < desired && now - lastSpawnTime > 500) {
     spawnEnemy();
     lastSpawnTime = now;
@@ -244,7 +211,6 @@ function updateEnemies() {
   for (let i = enemies.length - 1; i >= 0; i--) {
     const e = enemies[i];
 
-<<<<<<< HEAD
     // Simple steering toward player (blend wander + seek)
     const seekAngle = Math.atan2((player.y + player.size/2) - (e.y + e.size/2),
                                  (player.x + player.size/2) - (e.x + e.size/2));
@@ -256,28 +222,6 @@ function updateEnemies() {
 
     e.x += e.dx;
     e.y += e.dy;
-=======
-    // Update enemy animation frame based on time
-    if (now - e.lastFrameTime > e.frameSpeed) {
-      e.currentFrame = (e.currentFrame + 1) % 12; // Cycle through 12 frames
-      e.lastFrameTime = now;
-    }
-
-    // Move the enemy only when the current frame is between 3 and 9 (inclusive)
-    if (e.currentFrame >= 3 && e.currentFrame <= 9) {
-      // Simple steering toward player (blend wander + seek)
-      const seekAngle = Math.atan2((player.y + player.size / 2) - (e.y + e.size / 2),
-                                   (player.x + player.size / 2) - (e.x + e.size / 2));
-      const seekDX = Math.cos(seekAngle) * e.speed * 0.6;
-      const seekDY = Math.sin(seekAngle) * e.speed * 0.6;
-
-      e.dx = e.dx * 0.85 + seekDX * 0.15;
-      e.dy = e.dy * 0.85 + seekDY * 0.15;
-
-      e.x += e.dx;
-      e.y += e.dy;
-    }
->>>>>>> dev/easytbp
 
     // Keep inside playable area
     e.x = clamp(e.x, 0, visibleWidth - e.size);
@@ -294,19 +238,11 @@ function updateEnemies() {
     }
 
     // Enemy colliding into player causes damage
-<<<<<<< HEAD
     const eCenterX = e.x + e.size/2;
     const eCenterY = e.y + e.size/2;
     const pCenterX = player.x + player.size/2;
     const pCenterY = player.y + player.size/2;
     if (circleHit(eCenterX, eCenterY, e.size/2, pCenterX, pCenterY, player.size/2)) {
-=======
-    const eCenterX = e.x + e.size / 2;
-    const eCenterY = e.y + e.size / 2;
-    const pCenterX = player.x + player.size / 2;
-    const pCenterY = player.y + player.size / 2;
-    if (circleHit(eCenterX, eCenterY, e.size / 2, pCenterX, pCenterY, player.size / 2)) {
->>>>>>> dev/easytbp
       damagePlayer();
       // Knockback
       const ang = Math.atan2(pCenterY - eCenterY, pCenterX - eCenterX);
@@ -317,19 +253,10 @@ function updateEnemies() {
 }
 
 function drawEnemies() {
-<<<<<<< HEAD
   // Simple red squares as placeholders (replace with enemy sprites if you like)
   for (const e of enemies) {
     ctx.fillStyle = "#c0392b";
     ctx.fillRect(e.x, e.y, e.size, e.size);
-=======
-  for (const e of enemies) {
-    const img = slimeImages[e.currentFrame]; // Get the current frame for the enemy
-
-    if (img) {
-      ctx.drawImage(img, e.x, e.y, e.size, e.size); // Draw the slime image at the correct position
-    }
->>>>>>> dev/easytbp
 
     // Enemy health bar
     const bw = e.size, bh = 8, bx = e.x, by = e.y - 12;
