@@ -1,0 +1,43 @@
+v0.1.98
+1. Use requestAnimationFrame instead of setInterval.
+
+2. Separate logic updates (player, lasers, collisions) from animation frame timing (sprite cycling).
+
+3. Add laser cleanup when they leave the screen.
+
+4. Replace the blocking alert("Game Over!") with a canvas overlay.
+
+5. Add in Health system.
+
+v0.1.99
+1. Keeps invincibility frames (show flashing effect when get damage).
+
+2. Add health bar: 
+    i) Always appears above the player sprite.
+   ii) Changes color: green (safe) → yellow (mid) → red (danger).
+
+3. Remove hearts symbol show at the top left.
+
+v0.2.00
+1. Food removed → Enemies added
+   i) Replaced the single food object with an array of enemies.
+  ii) Enemies move around and spawn near the edges of the playable area.
+
+2. Enemy behavior
+   i) Each enemy moves (wanders but steers toward the player).
+  ii) Each enemy has its own health bar above it.
+ iii) Enemies shoot red lasers at the player on intervals.
+
+3. Player lasers vs enemies
+   i) Player’s blue lasers now damage enemies instead of “eating food”.
+  ii) Defeating an enemy increases the score.
+
+4. Spawning & difficulty scaling
+   i) More enemies spawn as the score increases.
+  ii) Enemies move faster and shoot more often the longer you survive.
+
+5. UI changes
+   i) Removed food drawing/collision.
+  ii) Player’s health bar still appears above the player.
+ iii) Score counter remains in the top-left.
+  iv) Game Over / Restart screen unchanged.

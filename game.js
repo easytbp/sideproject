@@ -1,300 +1,467 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
 
-// Set canvas size
+// --- Canvas & Play Area ------------------------------------------------------
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-// Define top and bottom black bars
 const topBlackAreaHeight = 400;
 const bottomBlackAreaHeight = 150;
 
-// Playable area size
 const visibleWidth = canvas.width;
 const visibleHeight = canvas.height - topBlackAreaHeight - bottomBlackAreaHeight;
 
-// Player
+// --- Utility -----------------------------------------------------------------
+function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
+function randRange(min, max) { return Math.random() * (max - min) + min; }
+function dist(ax, ay, bx, by) {
+  const dx = ax - bx, dy = ay - by;
+  return Math.hypot(dx, dy);
+}
+function circleHit(ax, ay, ar, bx, by, br) {
+  return dist(ax, ay, bx, by) < (ar + br);
+}
+
+// --- Player ------------------------------------------------------------------
 const player = {
-    x: canvas.width / 2,
-    y: canvas.height / 2,
-    size: 80,
-    speed: 5,
-    dx: 0,
-    dy: 0,
-    currentFrame: 0,
-    frameSpeed: 120, // ms per frame for sprite cycle
-    lastFrameTime: 0,
-    movementDirection: "down",
-    isMoving: false,
-    health: 3, // player starts with 3 health
-    isInvincible: false,
-    invincibilityDuration: 1000, // 1 second of invulnerability
-    lastHitTime: 0,
+  x: visibleWidth / 2,
+  y: topBlackAreaHeight + visibleHeight / 2,
+  size: 80,
+  speed: 5,
+  dx: 0,
+  dy: 0,
+  currentFrame: 0,
+  frameSpeed: 120, // ms per frame for sprite cycle
+  lastFrameTime: 0,
+  movementDirection: "down",
+  isMoving: false,
+  health: 5,
+  maxHealth: 5,
+  isInvincible: false,
+  invincibilityDuration: 1000,
+  lastHitTime: 0,
 };
 
 let score = 0;
 let gameOver = false;
 
-// Food
-const food = {
-    x: Math.random() * visibleWidth,
-    y: Math.random() * visibleHeight + topBlackAreaHeight,
-    size: 20,
-};
+// --- Input -------------------------------------------------------------------
+const keys = {};
+document.addEventListener("keydown", (e) => {
+  keys[e.key] = true;
 
-// Lasers
-const laserSpeed = 5;
+  if (!gameOver) {
+    if (e.key === "i" || e.key === "I") createPlayerLaser();
+    if (e.key === "ArrowUp")  { player.dy = -player.speed; player.movementDirection = "up"; }
+    if (e.key === "ArrowDown"){ player.dy =  player.speed; player.movementDirection = "down"; }
+    if (e.key === "ArrowLeft"){ player.dx = -player.speed; player.movementDirection = "left"; }
+    if (e.key === "ArrowRight"){player.dx =  player.speed; player.movementDirection = "right"; }
+    player.isMoving = true;
+  }
+
+  if (gameOver && (e.key === "r" || e.key === "R")) {
+    restartGame();
+  }
+});
+document.addEventListener("keyup", (e) => {
+  keys[e.key] = false;
+  if (!keys["ArrowUp"] && !keys["ArrowDown"]) player.dy = 0;
+  if (!keys["ArrowLeft"] && !keys["ArrowRight"]) player.dx = 0;
+  player.isMoving = keys["ArrowUp"] || keys["ArrowDown"] || keys["ArrowLeft"] || keys["ArrowRight"];
+});
+
+// --- Sprites & Background ----------------------------------------------------
+const playerImages = { up: [], down: [], left: [], right: [] };
+const backgroundImage = new Image();
+backgroundImage.src = "img/bg.jpg";
+let bgLoaded = false;
+backgroundImage.onload = () => { bgLoaded = true; };
+
+// Load player images safely (placeholders if missing)
+function loadImg(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+(async function loadPlayerImages() {
+  for (let i = 1; i <= 4; i++) {
+    playerImages.up.push(await loadImg(`img/u${i}.png`));
+    playerImages.down.push(await loadImg(`img/d${i}.png`));
+    playerImages.left.push(await loadImg(`img/l${i}.png`));
+    playerImages.right.push(await loadImg(`img/r${i}.png`));
+  }
+})();
+
+// --- Lasers ------------------------------------------------------------------
+const laserSpeed = 8;
 const laserSize = 10;
 const playerLasers = [];
 const enemyLasers = [];
 
-// Sprites
-const playerImages = { up: [], down: [], left: [], right: [] };
-const backgroundImage = new Image();
-backgroundImage.src = "img/bg.jpg";
-
-// Load player images
-async function loadPlayerImages() {
-    const loadImage = (src) => new Promise((res, rej) => {
-        const img = new Image();
-        img.src = src;
-        img.onload = () => res(img);
-        img.onerror = () => rej(src);
-    });
-    for (let i = 1; i <= 4; i++) {
-        playerImages.up.push(await loadImage(`img/u${i}.png`));
-        playerImages.down.push(await loadImage(`img/d${i}.png`));
-        playerImages.left.push(await loadImage(`img/l${i}.png`));
-        playerImages.right.push(await loadImage(`img/r${i}.png`));
-    }
-    requestAnimationFrame(gameLoop);
+function createPlayerLaser() {
+  const l = {
+    x: player.x + player.size / 2,
+    y: player.y + player.size / 2,
+    dx: 0, dy: 0,
+    size: laserSize,
+  };
+  if (player.movementDirection === "up") l.dy = -laserSpeed;
+  if (player.movementDirection === "down") l.dy =  laserSpeed;
+  if (player.movementDirection === "left") l.dx = -laserSpeed;
+  if (player.movementDirection === "right") l.dx =  laserSpeed;
+  // Normalize diagonal just in case (not used here since we only shoot axis-aligned)
+  playerLasers.push(l);
 }
 
-// Movement keys
-let keys = {};
-document.addEventListener("keydown", (e) => {
-    keys[e.key] = true;
-    if (e.key === "i" || e.key === "I") createLaser();
-    if (e.key === "ArrowUp") { player.dy = -player.speed; player.movementDirection = "up"; }
-    if (e.key === "ArrowDown") { player.dy = player.speed; player.movementDirection = "down"; }
-    if (e.key === "ArrowLeft") { player.dx = -player.speed; player.movementDirection = "left"; }
-    if (e.key === "ArrowRight") { player.dx = player.speed; player.movementDirection = "right"; }
-    player.isMoving = true;
-});
-document.addEventListener("keyup", (e) => {
-    keys[e.key] = false;
-    if (!keys["ArrowUp"] && !keys["ArrowDown"]) player.dy = 0;
-    if (!keys["ArrowLeft"] && !keys["ArrowRight"]) player.dx = 0;
-    player.isMoving = keys["ArrowUp"] || keys["ArrowDown"] || keys["ArrowLeft"] || keys["ArrowRight"];
-});
-
-// Update player
-function updatePlayer() {
-    player.x += player.dx;
-    player.y += player.dy;
-    player.x = Math.max(0, Math.min(player.x, visibleWidth - player.size));
-    player.y = Math.max(topBlackAreaHeight, Math.min(player.y, topBlackAreaHeight + visibleHeight - player.size));
+function createEnemyLaser(ex, ey, targetX, targetY, speed=6) {
+  const angle = Math.atan2(targetY - ey, targetX - ex);
+  enemyLasers.push({
+    x: ex, y: ey,
+    dx: Math.cos(angle) * speed,
+    dy: Math.sin(angle) * speed,
+    size: laserSize,
+  });
 }
 
-// Draw player
-function drawPlayer(time) {
-    if (player.isMoving && time - player.lastFrameTime > player.frameSpeed) {
-        player.currentFrame = (player.currentFrame + 1) % 4;
-        player.lastFrameTime = time;
-    }
-    const img = playerImages[player.movementDirection][player.currentFrame];
-
-    // Flash effect if invincible
-    if (player.isInvincible) {
-        if (Math.floor(time / 100) % 2 === 0) {
-            ctx.globalAlpha = 0.5;
-        } else {
-            ctx.globalAlpha = 1;
-        }
-    } else {
-        ctx.globalAlpha = 1;
-    }
-
-    ctx.drawImage(img, player.x, player.y, player.size, player.size);
-    ctx.globalAlpha = 1; // reset
-}
-
-// Food
-function drawFood() {
-    ctx.fillStyle = "#e74c3c";
-    ctx.beginPath();
-    ctx.arc(food.x, food.y, food.size, 0, Math.PI * 2);
-    ctx.fill();
-}
-
-function checkFoodCollision() {
-    const dx = player.x + player.size / 2 - food.x;
-    const dy = player.y + player.size / 2 - food.y;
-    if (Math.sqrt(dx * dx + dy * dy) < player.size / 2 + food.size / 2) {
-        score++;
-        food.x = Math.random() * (visibleWidth - food.size);
-        food.y = Math.random() * (visibleHeight - food.size) + topBlackAreaHeight;
-    }
-}
-
-// Lasers
-function createLaser() {
-    const laser = { x: player.x + player.size / 2, y: player.y + player.size / 2, dx: 0, dy: 0, size: laserSize };
-    if (player.movementDirection === "up") laser.dy = -laserSpeed;
-    if (player.movementDirection === "down") laser.dy = laserSpeed;
-    if (player.movementDirection === "left") laser.dx = -laserSpeed;
-    if (player.movementDirection === "right") laser.dx = laserSpeed;
-    playerLasers.push(laser);
-}
-function createEnemyLaser() {
-    const laser = { x: food.x, y: food.y, dx: (player.x - food.x) / 50, dy: (player.y - food.y) / 50, size: laserSize };
-    enemyLasers.push(laser);
-}
 function updateLasers() {
-    [playerLasers, enemyLasers].forEach(list => {
-        for (let i = list.length - 1; i >= 0; i--) {
-            list[i].x += list[i].dx;
-            list[i].y += list[i].dy;
-            if (list[i].x < 0 || list[i].x > canvas.width || list[i].y < 0 || list[i].y > canvas.height) {
-                list.splice(i, 1);
-            }
-        }
-    });
+  [playerLasers, enemyLasers].forEach(list => {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const l = list[i];
+      l.x += l.dx;
+      l.y += l.dy;
+      if (l.x < -50 || l.x > canvas.width + 50 || l.y < -50 || l.y > canvas.height + 50) {
+        list.splice(i, 1);
+      }
+    }
+  });
 }
+
 function drawLasers() {
-    playerLasers.forEach(l => { ctx.fillStyle = "blue"; ctx.beginPath(); ctx.arc(l.x, l.y, l.size, 0, Math.PI * 2); ctx.fill(); });
-    enemyLasers.forEach(l => { ctx.fillStyle = "red"; ctx.beginPath(); ctx.arc(l.x, l.y, l.size, 0, Math.PI * 2); ctx.fill(); });
+  // Player lasers
+  ctx.fillStyle = "blue";
+  for (const l of playerLasers) {
+    ctx.beginPath();
+    ctx.arc(l.x, l.y, l.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Enemy lasers
+  ctx.fillStyle = "red";
+  for (const l of enemyLasers) {
+    ctx.beginPath();
+    ctx.arc(l.x, l.y, l.size, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
-// Laser collisions
-function checkLaserCollisions() {
-    // Player lasers vs food
-    for (let i = playerLasers.length - 1; i >= 0; i--) {
-        const l = playerLasers[i];
-        const dx = l.x - food.x, dy = l.y - food.y;
-        if (Math.sqrt(dx * dx + dy * dy) < food.size / 2 + l.size / 2) {
-            score++;
-            food.x = Math.random() * (visibleWidth - food.size);
-            food.y = Math.random() * (visibleHeight - food.size) + topBlackAreaHeight;
-            playerLasers.splice(i, 1);
-        }
-    }
-    // Enemy lasers vs player
-    for (let i = enemyLasers.length - 1; i >= 0; i--) {
-        const l = enemyLasers[i];
-        const dx = l.x - (player.x + player.size / 2), dy = l.y - (player.y + player.size / 2);
-        if (Math.sqrt(dx * dx + dy * dy) < player.size / 2 + l.size / 2) {
-            if (!player.isInvincible) {
-                player.health--;
-                player.isInvincible = true;
-                player.lastHitTime = performance.now();
+// --- Enemies -----------------------------------------------------------------
+const enemies = [];
+let lastSpawnTime = 0;
 
-                if (player.health <= 0) {
-                    gameOver = true;
-                }
-            }
-            enemyLasers.splice(i, 1);
-        }
-    }
+function spawnEnemy() {
+  // Spawn around edges of the playable area
+  const side = Math.floor(Math.random() * 4);
+  let x, y;
+  const margin = 40;
+  if (side === 0) { // top edge of play area
+    x = randRange(0, visibleWidth - 60);
+    y = topBlackAreaHeight + margin;
+  } else if (side === 1) { // bottom edge
+    x = randRange(0, visibleWidth - 60);
+    y = topBlackAreaHeight + visibleHeight - margin - 60;
+  } else if (side === 2) { // left
+    x = margin;
+    y = randRange(topBlackAreaHeight + margin, topBlackAreaHeight + visibleHeight - margin - 60);
+  } else { // right
+    x = visibleWidth - margin - 60;
+    y = randRange(topBlackAreaHeight + margin, topBlackAreaHeight + visibleHeight - margin - 60);
+  }
+
+  const baseSpeed = 1.8 + Math.min(2.2, score * 0.02);
+  const enemy = {
+    x, y,
+    size: 60,
+    speed: baseSpeed,
+    dx: randRange(-1, 1),
+    dy: randRange(-1, 1),
+    health: 2 + Math.floor(score / 15), // scales a bit with score
+    fireInterval: randRange(800, 1600) - Math.min(600, score * 5), // shoots faster with score
+    lastFire: performance.now() + randRange(0, 500),
+  };
+
+  // Normalize movement vector
+  const len = Math.hypot(enemy.dx, enemy.dy) || 1;
+  enemy.dx = (enemy.dx / len) * enemy.speed;
+  enemy.dy = (enemy.dy / len) * enemy.speed;
+
+  enemies.push(enemy);
 }
 
-// Draw background
+function updateEnemies() {
+  const now = performance.now();
+  // Desired enemy count scales with score
+  const desired = 3 + Math.floor(score / 10); // 3.. up
+  if (enemies.length < desired && now - lastSpawnTime > 500) {
+    spawnEnemy();
+    lastSpawnTime = now;
+  }
+
+  for (let i = enemies.length - 1; i >= 0; i--) {
+    const e = enemies[i];
+
+    // Simple steering toward player (blend wander + seek)
+    const seekAngle = Math.atan2((player.y + player.size/2) - (e.y + e.size/2),
+                                 (player.x + player.size/2) - (e.x + e.size/2));
+    const seekDX = Math.cos(seekAngle) * e.speed * 0.6;
+    const seekDY = Math.sin(seekAngle) * e.speed * 0.6;
+
+    e.dx = e.dx * 0.85 + seekDX * 0.15;
+    e.dy = e.dy * 0.85 + seekDY * 0.15;
+
+    e.x += e.dx;
+    e.y += e.dy;
+
+    // Keep inside playable area
+    e.x = clamp(e.x, 0, visibleWidth - e.size);
+    e.y = clamp(e.y, topBlackAreaHeight, topBlackAreaHeight + visibleHeight - e.size);
+
+    // Bounce off edges slightly
+    if (e.x <= 0 || e.x >= visibleWidth - e.size) e.dx *= -1;
+    if (e.y <= topBlackAreaHeight || e.y >= topBlackAreaHeight + visibleHeight - e.size) e.dy *= -1;
+
+    // Fire at player
+    if (now - e.lastFire >= e.fireInterval) {
+      createEnemyLaser(e.x + e.size / 2, e.y + e.size / 2, player.x + player.size / 2, player.y + player.size / 2, 6 + Math.min(4, score * 0.02));
+      e.lastFire = now;
+    }
+
+    // Enemy colliding into player causes damage
+    const eCenterX = e.x + e.size/2;
+    const eCenterY = e.y + e.size/2;
+    const pCenterX = player.x + player.size/2;
+    const pCenterY = player.y + player.size/2;
+    if (circleHit(eCenterX, eCenterY, e.size/2, pCenterX, pCenterY, player.size/2)) {
+      damagePlayer();
+      // Knockback
+      const ang = Math.atan2(pCenterY - eCenterY, pCenterX - eCenterX);
+      player.x += Math.cos(ang) * 20;
+      player.y += Math.sin(ang) * 20;
+    }
+  }
+}
+
+function drawEnemies() {
+  // Simple red squares as placeholders (replace with enemy sprites if you like)
+  for (const e of enemies) {
+    ctx.fillStyle = "#c0392b";
+    ctx.fillRect(e.x, e.y, e.size, e.size);
+
+    // Enemy health bar
+    const bw = e.size, bh = 8, bx = e.x, by = e.y - 12;
+    ctx.fillStyle = "grey";
+    ctx.fillRect(bx, by, bw, bh);
+    const pct = clamp(e.health / Math.max(1, (2 + Math.floor(score / 15))), 0, 1);
+    ctx.fillStyle = pct > 0.5 ? "limegreen" : pct > 0.25 ? "yellow" : "red";
+    ctx.fillRect(bx, by, bw * pct, bh);
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(bx, by, bw, bh);
+  }
+}
+
+// --- Collisions --------------------------------------------------------------
+function handleCollisions() {
+  // Player lasers vs enemies
+  for (let i = playerLasers.length - 1; i >= 0; i--) {
+    const l = playerLasers[i];
+    const lx = l.x, ly = l.y, lr = l.size / 2;
+    let hit = false;
+
+    for (let j = enemies.length - 1; j >= 0; j--) {
+      const e = enemies[j];
+      const ex = e.x + e.size / 2, ey = e.y + e.size / 2, er = e.size / 2;
+      if (circleHit(lx, ly, lr, ex, ey, er)) {
+        hit = true;
+        e.health -= 1;
+        if (e.health <= 0) {
+          enemies.splice(j, 1);
+          score += 1;
+        }
+        break;
+      }
+    }
+    if (hit) playerLasers.splice(i, 1);
+  }
+
+  // Enemy lasers vs player
+  for (let i = enemyLasers.length - 1; i >= 0; i--) {
+    const l = enemyLasers[i];
+    const px = player.x + player.size / 2, py = player.y + player.size / 2;
+    if (circleHit(l.x, l.y, l.size / 2, px, py, player.size / 2)) {
+      enemyLasers.splice(i, 1);
+      damagePlayer();
+    }
+  }
+}
+
+function damagePlayer() {
+  if (!player.isInvincible) {
+    player.health--;
+    player.isInvincible = true;
+    player.lastHitTime = performance.now();
+    if (player.health <= 0) {
+      gameOver = true;
+    }
+  }
+}
+
+// --- Player Update/Draw ------------------------------------------------------
+function updatePlayer() {
+  player.x += player.dx;
+  player.y += player.dy;
+
+  player.x = clamp(player.x, 0, visibleWidth - player.size);
+  player.y = clamp(player.y, topBlackAreaHeight, topBlackAreaHeight + visibleHeight - player.size);
+}
+
+function drawPlayer(time) {
+  // Animate
+  if (player.isMoving && time - player.lastFrameTime > player.frameSpeed) {
+    player.currentFrame = (player.currentFrame + 1) % 4;
+    player.lastFrameTime = time;
+  }
+
+  const arr = playerImages[player.movementDirection];
+  const img = arr && arr[player.currentFrame];
+
+  // Flash if invincible
+  if (player.isInvincible) {
+    ctx.globalAlpha = (Math.floor(time / 100) % 2 === 0) ? 0.5 : 1;
+  } else {
+    ctx.globalAlpha = 1;
+  }
+
+  if (img) {
+    ctx.drawImage(img, player.x, player.y, player.size, player.size);
+  } else {
+    // Placeholder if sprite missing
+    ctx.fillStyle = "#2ecc71";
+    ctx.fillRect(player.x, player.y, player.size, player.size);
+  }
+
+  ctx.globalAlpha = 1;
+}
+
+// --- UI ----------------------------------------------------------------------
 function drawBackground() {
+  if (bgLoaded && backgroundImage.width > 0 && backgroundImage.height > 0) {
     const imgRatio = backgroundImage.width / backgroundImage.height;
     const canvasRatio = canvas.width / canvas.height;
     let drawW, drawH, offX = 0, offY = 0;
     if (canvasRatio > imgRatio) {
-        drawH = canvas.height;
-        drawW = backgroundImage.width * (drawH / backgroundImage.height);
-        offX = (canvas.width - drawW) / 2;
+      drawH = canvas.height;
+      drawW = backgroundImage.width * (drawH / backgroundImage.height);
+      offX = (canvas.width - drawW) / 2;
     } else {
-        drawW = canvas.width;
-        drawH = backgroundImage.height * (drawW / backgroundImage.width);
-        offY = (canvas.height - drawH) / 2;
+      drawW = canvas.width;
+      drawH = backgroundImage.height * (drawW / backgroundImage.width);
+      offY = (canvas.height - drawH) / 2;
     }
     ctx.drawImage(backgroundImage, offX, offY, drawW, drawH);
+  } else {
+    // Fallback background
+    ctx.fillStyle = "#1e1e1e";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+
+  // Top & bottom black bars
+  ctx.fillStyle = "transparent";
+  ctx.fillRect(0, 0, canvas.width, topBlackAreaHeight);
+  ctx.fillRect(0, canvas.height - bottomBlackAreaHeight, canvas.width, bottomBlackAreaHeight);
 }
 
-// Score & Game Over text
 function drawScore() {
-    ctx.font = "30px Arial";
-    ctx.fillStyle = "white";
-    ctx.fillText("Score: " + score, 10, 30);
-}
-function drawGameOver() {
-    ctx.font = "60px Arial";
-    ctx.fillStyle = "red";
-    ctx.fillText("GAME OVER", canvas.width / 2 - 180, canvas.height / 2);
-    ctx.font = "30px Arial";
-    ctx.fillStyle = "white";
-    ctx.fillText("Press R to restart", canvas.width / 2 - 130, canvas.height / 2 + 50);
+  ctx.font = "30px Arial";
+  ctx.fillStyle = "white";
+  ctx.fillText("Score: " + score, 14, 36);
 }
 
-document.addEventListener("keydown", (e) => {
-    if (gameOver && (e.key === "r" || e.key === "R")) {
-        score = 0;
-        gameOver = false;
-        player.x = canvas.width / 2;
-        player.y = canvas.height / 2;
-        playerLasers.length = 0;
-        enemyLasers.length = 0;
-        player.health = 3; //reset health
-        player.isInvincible = false;
-    }
+function drawHealthBarAbovePlayer() {
+  const barWidth = player.size;
+  const barHeight = 10;
+  const barX = player.x;
+  const barY = player.y - 15;
+
+  ctx.fillStyle = "grey";
+  ctx.fillRect(barX, barY, barWidth, barHeight);
+
+  const healthPercent = player.health / player.maxHealth;
+  ctx.fillStyle = healthPercent > 0.5 ? "limegreen" : healthPercent > 0.25 ? "yellow" : "red";
+  ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+
+  ctx.strokeStyle = "black";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(barX, barY, barWidth, barHeight);
+}
+
+function drawGameOver() {
+  ctx.font = "60px Arial";
+  ctx.fillStyle = "red";
+  ctx.fillText("GAME OVER", canvas.width / 2 - 180, canvas.height / 2);
+  ctx.font = "30px Arial";
+  ctx.fillStyle = "white";
+  ctx.fillText("Press R to restart", canvas.width / 2 - 130, canvas.height / 2 + 50);
+}
+
+// --- Restart -----------------------------------------------------------------
+function restartGame() {
+  score = 0;
+  gameOver = false;
+  player.x = visibleWidth / 2;
+  player.y = topBlackAreaHeight + visibleHeight / 2;
+  player.dx = 0;
+  player.dy = 0;
+  playerLasers.length = 0;
+  enemyLasers.length = 0;
+  enemies.length = 0;
+  player.health = player.maxHealth;
+  player.isInvincible = false;
+  lastSpawnTime = 0;
+}
+
+// --- Resize ------------------------------------------------------------------
+window.addEventListener("resize", () => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 });
 
-// Draw heart bar
-function drawHealth() {
-    const barWidth = 80;   // same as player size
-    const barHeight = 10;
-    const barX = player.x;
-    const barY = player.y - 15; // just above the player
-
-    // Draw background (empty bar)
-    ctx.fillStyle = "grey";
-    ctx.fillRect(barX, barY, barWidth, barHeight);
-
-    // Calculate percentage
-    const healthPercent = player.health / 3; // max health = 3
-    ctx.fillStyle = healthPercent > 0.5 ? "limegreen" : healthPercent > 0.25 ? "yellow" : "red";
-    ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
-
-    // Border
-    ctx.strokeStyle = "black";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(barX, barY, barWidth, barHeight);
-}
-// Main loop
+// --- Main Loop ---------------------------------------------------------------
 function gameLoop(time) {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "black";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    drawBackground();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  drawBackground();
 
-    // Handle invincibility timeout
-    if (player.isInvincible && performance.now() - player.lastHitTime > player.invincibilityDuration) {
-        player.isInvincible = false;
-    }
+  // Handle invincibility timeout
+  if (player.isInvincible && performance.now() - player.lastHitTime > player.invincibilityDuration) {
+    player.isInvincible = false;
+  }
 
-    if (!gameOver) {
-        updatePlayer();
-        checkFoodCollision();
-        checkLaserCollisions();
-        updateLasers();
+  if (!gameOver) {
+    updatePlayer();
+    updateEnemies();
+    updateLasers();
+    handleCollisions();
 
-        drawPlayer(time);
-        drawFood();
-        drawLasers();
-        drawScore();
-        drawHealth();
+    drawEnemies();
+    drawPlayer(time);
+    drawLasers();
+    drawScore();
+    drawHealthBarAbovePlayer();
+  } else {
+    drawGameOver();
+  }
 
-        if (Math.random() < 0.01) createEnemyLaser();
-    } else {
-        drawGameOver();
-    }
-
-    requestAnimationFrame(gameLoop);
+  requestAnimationFrame(gameLoop);
 }
-
-loadPlayerImages();
-
+requestAnimationFrame(gameLoop);
